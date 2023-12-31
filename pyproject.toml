@@ -1,0 +1,22 @@
+[tool.poetry]
+name = "ezmsg-tasks"
+version = "0.1.0"
+description = "Psychophysics tasks for ezmsg"
+authors = ["Griffin Milsap <griffin.milsap@jhuapl.edu>"]
+readme = "README.md"
+homepage = "https://github.com/griffinmilsap/ezmsg-tasks"
+packages = [
+  { include = "ezmsg", from = "src" }
+]
+
+
+[tool.poetry.dependencies]
+python = "^3.9"
+ezmsg = "^3.3.3"
+ezmsg-sigproc = "^1.2.0"
+ezmsg-panel = { git = "https://github.com/griffinmilsap/ezmsg-panel.git", rev = "main" }
+
+
+[build-system] 
+requires = ["poetry-core"] 
+build-backend = "poetry.core.masonry.api"
