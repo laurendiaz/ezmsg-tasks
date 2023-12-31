@@ -76,8 +76,7 @@ class CuedActionTaskImplementation(TaskImplementation):
                     pn.layout.HSpacer()
                 ),
                 pn.layout.VSpacer(),
-                height = 600,
-                sizing_mode = 'stretch_height',
+                min_height = 600,
             ),
             styles = {'background': 'lightgray'},
             hide_header = True,

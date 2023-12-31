@@ -141,7 +141,8 @@ if __name__ == '__main__':
 
     injector = SignalInjector(
         SignalInjectorSettings(
-            amplitude = 6.0
+            amplitude = 6.0,
+            mixing_seed = 0xDEADBEEF,
         )
     )
 
