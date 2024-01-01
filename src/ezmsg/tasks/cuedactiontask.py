@@ -52,7 +52,7 @@ class CuedActionTaskImplementation(TaskImplementation):
         return 'CAT'
     
     @property
-    def name(self) -> str:
+    def tab_name(self) -> str:
         """ Title of task used in header of page """
         return 'Cued Action Task'
     
