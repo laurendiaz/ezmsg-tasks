@@ -3,13 +3,12 @@ import asyncio
 import datetime
 import random
 
-from pathlib import Path
-
 import ezmsg.core as ez
 import panel as pn
 
-from ezmsg.sigproc.sampler import SampleTriggerMessage
-from ezmsg.panel.application import Application, ApplicationSettings
+from ezmsg.sigproc.sampler import SampleTriggerMessage, SampleMessage
+from ezmsg.util.messages.axisarray import AxisArray
+from ezmsg.panel.tabbedapp import TabbedApp, Tab
 
 from param.parameterized import Event
 
@@ -257,11 +256,43 @@ class CuedActionTask(Task):
     INPUT_CLASS = ez.InputStream(typing.Optional[str])
     OUTPUT_TARGET_CLASS = ez.OutputStream(typing.Optional[str])
 
-    TASK: CuedActionTaskImplementation = \
-        CuedActionTaskImplementation()
+    TASK = CuedActionTaskImplementation()
 
     def network(self) -> ez.NetworkDefinition:
         return list(super().network()) + [
             (self.INPUT_CLASS, self.TASK.INPUT_CLASS),
             (self.TASK.OUTPUT_TARGET_CLASS, self.OUTPUT_TARGET_CLASS)
         ]
+    
+
+class CuedActionTaskApp(ez.Collection, TabbedApp):
+
+    SETTINGS: TaskSettings
+
+    INPUT_SIGNAL = ez.InputStream(AxisArray)
+    OUTPUT_SAMPLE = ez.OutputStream(SampleMessage)
+    INPUT_CLASS = ez.InputStream(typing.Optional[str])
+    OUTPUT_TARGET_CLASS = ez.OutputStream(typing.Optional[str])
+    
+    TASK = CuedActionTask()
+
+    def configure(self) -> None:
+        self.TASK.apply_settings(self.SETTINGS)
+
+    @property
+    def title(self) -> str:
+        return "Cued Action Task"
+
+    @property
+    def tabs(self) -> typing.List[Tab]:
+        return [
+            self.TASK
+        ]
+    
+    def network(self) -> ez.NetworkDefinition:
+        return (
+            (self.INPUT_SIGNAL, self.TASK.INPUT_SIGNAL),
+            (self.INPUT_CLASS, self.TASK.INPUT_CLASS),
+            (self.TASK.OUTPUT_SAMPLE, self.OUTPUT_SAMPLE),
+            (self.TASK.OUTPUT_TARGET_CLASS, self.OUTPUT_TARGET_CLASS)
+        )
