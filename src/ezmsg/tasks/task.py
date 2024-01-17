@@ -66,7 +66,7 @@ class TaskImplementation(ez.Unit, Tab):
         return 'TASK'
 
     @property
-    def tab_name(self) -> str:
+    def title(self) -> str:
         """ Full name of Task that appears in UI """
         return 'Task Implementation'
     
@@ -224,8 +224,8 @@ class Task(ez.Collection, Tab):
         )
 
     @property
-    def tab_name(self) -> str:
-        return self.TASK.tab_name
+    def title(self) -> str:
+        return self.TASK.title
             
     def sidebar(self) -> pn.viewable.Viewable:
         return self.TASK.sidebar()
