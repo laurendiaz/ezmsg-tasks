@@ -264,35 +264,3 @@ class CuedActionTask(Task):
             (self.TASK.OUTPUT_TARGET_CLASS, self.OUTPUT_TARGET_CLASS)
         ]
     
-
-class CuedActionTaskApp(ez.Collection, TabbedApp):
-
-    SETTINGS: TaskSettings
-
-    INPUT_SIGNAL = ez.InputStream(AxisArray)
-    OUTPUT_SAMPLE = ez.OutputStream(SampleMessage)
-    INPUT_CLASS = ez.InputStream(typing.Optional[str])
-    OUTPUT_TARGET_CLASS = ez.OutputStream(typing.Optional[str])
-    
-    TASK = CuedActionTask()
-
-    def configure(self) -> None:
-        self.TASK.apply_settings(self.SETTINGS)
-
-    @property
-    def title(self) -> str:
-        return "Cued Action Task"
-
-    @property
-    def tabs(self) -> typing.List[Tab]:
-        return [
-            self.TASK
-        ]
-    
-    def network(self) -> ez.NetworkDefinition:
-        return (
-            (self.INPUT_SIGNAL, self.TASK.INPUT_SIGNAL),
-            (self.INPUT_CLASS, self.TASK.INPUT_CLASS),
-            (self.TASK.OUTPUT_SAMPLE, self.OUTPUT_SAMPLE),
-            (self.TASK.OUTPUT_TARGET_CLASS, self.OUTPUT_TARGET_CLASS)
-        )

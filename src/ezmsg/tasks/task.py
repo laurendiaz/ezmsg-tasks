@@ -48,11 +48,14 @@ class TaskImplementationState(ez.State):
 
     recording_file: typing.Optional[typing.TextIO] = None
 
+    trigger_queue: asyncio.Queue[SampleTriggerMessage]
+
 
 class TaskImplementation(ez.Unit, Tab):
 
     # NOTE: For compatibility with TaskDirectory, 
     # Task implementations should NOT have derived settings
+    # This should be a reasonable ask because we will have UI for such things
 
     SETTINGS: TaskSettings
     STATE: TaskImplementationState
@@ -121,8 +124,16 @@ class TaskImplementation(ez.Unit, Tab):
             title = 'Recording',
             **sw
         )
+    
+        self.STATE.trigger_queue = asyncio.Queue()
 
     @ez.publisher(OUTPUT_TRIGGER)
+    async def pub_triggers(self) -> typing.AsyncGenerator:
+        while True:
+            trig = await self.STATE.trigger_queue.get()
+            yield self.OUTPUT_TRIGGER, trig
+    
+    @ez.task    
     async def run_task(self) -> typing.AsyncGenerator:
             
         while True:
@@ -156,7 +167,7 @@ class TaskImplementation(ez.Unit, Tab):
             try:
                 async for trigger in self.task_implementation():
                     if trigger:
-                        yield self.OUTPUT_TRIGGER, trigger
+                        self.STATE.trigger_queue.put_nowait(trigger)
                     if not self.STATE.run_event.is_set():
                         raise TaskEndedEarly()
 
@@ -193,13 +204,13 @@ class TaskImplementation(ez.Unit, Tab):
             self.STATE.n_trials.value += 1 # type: ignore
             
 
-    def content(self) -> pn.viewable.Viewable:
+    def content(self):
         return pn.layout.Card(
             '# Task Area', 
             sizing_mode = 'stretch_both'
         )
 
-    def sidebar(self) -> pn.viewable.Viewable:
+    def sidebar(self):
         return pn.Column(
             self.STATE.status_card,
             self.STATE.recording_card
@@ -212,6 +223,7 @@ class Task(ez.Collection, Tab):
     TASK: TaskImplementation
     SAMPLER = Sampler()
 
+    INPUT_TRIGGER = ez.InputStream(SampleTriggerMessage)
     INPUT_SIGNAL = ez.InputStream(AxisArray)
     OUTPUT_SAMPLE = ez.OutputStream(SampleMessage)
 
@@ -236,6 +248,7 @@ class Task(ez.Collection, Tab):
     def network(self) -> ez.NetworkDefinition:
         return (
             (self.INPUT_SIGNAL, self.SAMPLER.INPUT_SIGNAL),
+            (self.INPUT_TRIGGER, self.SAMPLER.INPUT_TRIGGER),
             (self.TASK.OUTPUT_TRIGGER, self.SAMPLER.INPUT_TRIGGER),
             (self.SAMPLER.OUTPUT_SAMPLE, self.TASK.INPUT_SAMPLE),
             (self.SAMPLER.OUTPUT_SAMPLE, self.OUTPUT_SAMPLE)
