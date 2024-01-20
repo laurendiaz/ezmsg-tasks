@@ -68,15 +68,19 @@ class FeedbackTaskImplementation(TaskImplementation):
 
 
         self.STATE.run_duration = pn.widgets.FloatInput(
-            name = 'Run Duration (sec)', 
-            value = 30, 
+            name = 'Run Duration (sec) -- 0 = Run Forever', 
             start = 0, 
             sizing_mode = 'stretch_width'
         )
 
         @pn.depends(self.STATE.run_duration, watch = True)
         def update_run_calc(run_duration: float):
-            self.STATE.run_info.value = f'Duration: {run_duration} sec'
+            if run_duration != 0:
+                self.STATE.run_info.value = f'Duration: {run_duration} sec'
+            else:
+                self.STATE.run_info.value = f'Duration: Until Stopped'
+        
+        self.STATE.run_duration.value = 30
 
         self.STATE.task_controls = pn.WidgetBox(
             self.STATE.run_duration,
@@ -84,13 +88,15 @@ class FeedbackTaskImplementation(TaskImplementation):
         )
 
         self.STATE.input_class = asyncio.Queue()
+
+        self.STATE.progress.max = 100
+        self.STATE.progress.value = 0
     
     @ez.subscriber(INPUT_CLASS)
     async def on_class_input(self, msg: typing.Optional[str]) -> None:
         self.STATE.input_class.put_nowait(msg)
         if msg: 
             self.STATE.stimulus.value = msg
-            ez.logger.info('Input Class: {msg}')
         else:
             self.STATE.stimulus.value = ''
 
@@ -102,25 +108,31 @@ class FeedbackTaskImplementation(TaskImplementation):
             # Grab all widget values so they can't be changed during run
             run_duration: float = self.STATE.run_duration.value # type: ignore
 
-            n_updates = 100
-
-            self.STATE.progress.max = n_updates
-            self.STATE.progress.value = 0
+            self.STATE.status.value = 'Running...'
             self.STATE.progress.bar_color = 'primary'
             self.STATE.progress.disabled = False
-            
-            self.STATE.status.value = 'Running...'
-                
-            sleep_time = run_duration / n_updates
-            for itr in range(n_updates):
-                # thrilling, I know ;)
-                await asyncio.sleep(sleep_time)
-                self.STATE.progress.value = itr + 1
-                yield None
 
-            raise TaskComplete
+            if run_duration == 0:
+                self.STATE.progress.value = self.STATE.progress.max
+                self.STATE.progress.active = True
+
+                while True:
+                    await asyncio.sleep(0.1)
+                    yield None
+            
+            else:
+                self.STATE.progress.value = 0
+                sleep_time = run_duration / self.STATE.progress.max
+                for itr in range(self.STATE.progress.max):
+                    # thrilling, I know ;)
+                    await asyncio.sleep(sleep_time)
+                    self.STATE.progress.value = itr + 1
+                    yield None
+
+                raise TaskComplete
 
         finally:
+            self.STATE.progress.active = False
             self.STATE.task_controls.disabled = False
     
     def content(self) -> pn.viewable.Viewable:

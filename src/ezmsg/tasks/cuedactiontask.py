@@ -170,7 +170,6 @@ class CuedActionTaskImplementation(TaskImplementation):
     @ez.subscriber(INPUT_CLASS)
     async def on_class_input(self, msg: typing.Optional[str]) -> None:
         self.STATE.input_class.put_nowait(msg)
-        if msg: ez.logger.info('Input Class: {msg}')
 
     @ez.publisher(OUTPUT_TARGET_CLASS)
     async def output_class(self) -> typing.AsyncGenerator:
