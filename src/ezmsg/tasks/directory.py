@@ -15,17 +15,20 @@ from ezmsg.panel.timeseriesplot import TimeSeriesPlot, TimeSeriesPlotSettings
 
 from .task import Task, TaskSettings
 from .cuedactiontask import CuedActionTask
+from .ssvep.task import SSVEPTask
 from .frequencymapper import FrequencyMapper, FrequencyMapperSettings
 
 
 class TaskDirectory(ez.Collection, TabbedApp):
 
     CAT = CuedActionTask()
+    SSVEP  = SSVEPTask()
 
     @property
     def all_tasks(self) -> typing.List[Task]:
         return [
             self.CAT,
+            self.SSVEP
         ]
     
     SETTINGS: TaskSettings
@@ -99,7 +102,7 @@ if __name__ == '__main__':
         '--data-dir',
         type = lambda x: Path( x ),
         help = "Directory to store samples and models",
-        default = Path.home() / 'ezmsg-fbcsp'
+        default = Path.home() / 'ezmsg-tasks'
     )
 
     parser.add_argument(
@@ -130,11 +133,20 @@ if __name__ == '__main__':
     freq_map = FrequencyMapper(
         FrequencyMapperSettings(
             mapping = {
+                # CAT
                 'GO': 15.0,
                 'UP': 18.0,
                 'DOWN': 20.0,
                 'LEFT': 23.0,
                 'RIGHT': 25.0,
+
+                # SSVEP
+                '7.14 Hz': 7.14,
+                '8.33 Hz': 8.33,
+                '10.00 Hz': 10.0,
+                '12.50 Hz': 12.5,
+                '16.67 Hz': 16.67,
+                '25.00 Hz': 25.0,
             },
         )
     )

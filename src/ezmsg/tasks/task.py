@@ -166,7 +166,7 @@ class TaskImplementation(ez.Unit, Tab):
 
             try:
                 async for trigger in self.task_implementation():
-                    if trigger:
+                    if isinstance(trigger, SampleTriggerMessage):
                         self.STATE.trigger_queue.put_nowait(trigger)
                     if not self.STATE.run_event.is_set():
                         raise TaskEndedEarly()
