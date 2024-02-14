@@ -255,7 +255,7 @@ class CuedActionTask(Task):
     INPUT_CLASS = ez.InputStream(typing.Optional[str])
     OUTPUT_TARGET_CLASS = ez.OutputStream(typing.Optional[str])
 
-    TASK = CuedActionTaskImplementation()
+    TASK:CuedActionTaskImplementation = CuedActionTaskImplementation()
 
     def network(self) -> ez.NetworkDefinition:
         return list(super().network()) + [
