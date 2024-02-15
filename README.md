@@ -10,5 +10,5 @@ Psychophysics tasks for [`ezmsg`](https://github.com/iscoe/ezmsg), currently imp
 
 ## Demo
 ```python
-python -m ezmsg.tasks.dashboard
+python -m ezmsg.tasks.directory
 ```
