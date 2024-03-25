@@ -15,6 +15,7 @@ python = "^3.9"
 ezmsg = "^3.3.3"
 ezmsg-sigproc = "^1.2.0"
 ezmsg-panel = { git = "https://github.com/griffinmilsap/ezmsg-panel.git", rev = "main" }
+imageio = "^2.34.0"
 
 
 [build-system] 
