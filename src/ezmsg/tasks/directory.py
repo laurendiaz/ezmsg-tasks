@@ -100,7 +100,7 @@ if __name__ == '__main__':
 
     parser.add_argument( 
         '--data-dir',
-        type = lambda x: Path( x ),
+        type = lambda x: Path(x).expanduser(),
         help = "Directory to store samples and models",
         default = Path.home() / 'ezmsg-tasks'
     )

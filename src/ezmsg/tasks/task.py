@@ -1,5 +1,3 @@
-
-import json
 import asyncio
 import typing
 import datetime
@@ -11,8 +9,8 @@ import panel as pn
 
 from ezmsg.panel.tabbedapp import Tab
 from ezmsg.sigproc.sampler import Sampler, SamplerSettings, SampleMessage, SampleTriggerMessage
-from ezmsg.util.messagecodec import MessageEncoder, LogStart
 from ezmsg.util.messages.axisarray import AxisArray
+from ezmsg.util.messagelogger import MessageLogger
 
 from param.parameterized import Event
 
@@ -46,7 +44,9 @@ class TaskImplementationState(ez.State):
     n_trials: pn.indicators.Number
     recording_card: pn.layout.Card
 
-    recording_file: typing.Optional[typing.TextIO] = None
+    recording_path: typing.Optional[Path]
+    recording_started: asyncio.Event
+    recording_stopped: asyncio.Event
 
     trigger_queue: asyncio.Queue[SampleTriggerMessage]
 
@@ -60,8 +60,14 @@ class TaskImplementation(ez.Unit, Tab):
     SETTINGS: TaskSettings
     STATE: TaskImplementationState
 
-    INPUT_SAMPLE = ez.InputStream(SampleMessage)
     OUTPUT_TRIGGER = ez.OutputStream(SampleTriggerMessage)
+
+    # I dislike this interface to MessageLogger.
+    OUTPUT_LOGSTART = ez.OutputStream(Path)
+    INPUT_LOGSTARTED = ez.InputStream(Path)
+    INPUT_MESSAGELOGGED = ez.InputStream(SampleMessage)
+    OUTPUT_LOGSTOP = ez.OutputStream(Path)
+    INPUT_LOGSTOPPED = ez.InputStream(Path)
     
     @property
     def slug(self) -> str:
@@ -109,6 +115,7 @@ class TaskImplementation(ez.Unit, Tab):
             **sw
         )
 
+        self.STATE.recording_path = None
         self.STATE.recording_fname = pn.widgets.StaticText(name = 'File', value = '', **sw)
         self.STATE.n_trials = pn.widgets.Number(value = 0, format = 'Recorded {value} Trials', font_size = '10pt', **sw)
 
@@ -126,17 +133,33 @@ class TaskImplementation(ez.Unit, Tab):
         )
     
         self.STATE.trigger_queue = asyncio.Queue()
+        self.STATE.recording_started = asyncio.Event()
+        self.STATE.recording_stopped = asyncio.Event()
 
     @ez.publisher(OUTPUT_TRIGGER)
     async def pub_triggers(self) -> typing.AsyncGenerator:
         while True:
             trig = await self.STATE.trigger_queue.get()
             yield self.OUTPUT_TRIGGER, trig
+
+    @ez.subscriber(INPUT_LOGSTARTED)
+    async def on_log_started(self, msg: Path) -> None:
+        ez.logger.debug(f'Log Started: {msg=}')
+        if msg == self.STATE.recording_path:
+            self.STATE.recording_started.set()
+
+    @ez.subscriber(INPUT_LOGSTOPPED)
+    async def on_log_stopped(self, msg: Path) -> None:
+        ez.logger.debug(f'Log Stopped: {msg=}')
+        if msg == self.STATE.recording_path:
+            self.STATE.recording_stopped.set()
     
-    @ez.task    
+    @ez.publisher(OUTPUT_LOGSTART)
+    @ez.publisher(OUTPUT_LOGSTOP)    
     async def run_task(self) -> typing.AsyncGenerator:
             
         while True:
+            self.STATE.recording_path = None
             self.STATE.progress.disabled = True
             self.STATE.status.value = 'Idle'
             await self.STATE.run_event.wait()
@@ -156,9 +179,13 @@ class TaskImplementation(ez.Unit, Tab):
                 self.STATE.recording_fname.value = '/'.join(record_file.parts[-2:])
                 if not record_file.parent.exists():
                     record_file.parent.mkdir(parents = True, exist_ok = True)
-                self.STATE.recording_file = open(record_file, 'w')
-                start_msg = json.dumps(LogStart(), cls = MessageEncoder)
-                self.STATE.recording_file.write(f'{start_msg}\n')
+
+                self.STATE.recording_path = record_file
+                self.STATE.recording_started.clear()
+                ez.logger.info(f'Start Log: {self.STATE.recording_path=}')
+                yield self.OUTPUT_LOGSTART, self.STATE.recording_path
+                await self.STATE.recording_started.wait()
+
             else:
                 style = {'color': 'red'}
                 self.STATE.recording_fname.value = 'NOT RECORDING'
@@ -187,22 +214,18 @@ class TaskImplementation(ez.Unit, Tab):
                 self.STATE.recording_fname.styles = {}
                 self.STATE.recording_subdir.disabled = False
 
-                if self.STATE.recording_file is not None:
-                    self.STATE.recording_file.flush()
-                    self.STATE.recording_file.close()
-                self.STATE.recording_file = None
+                if self.STATE.recording_path:
+                    self.STATE.recording_stopped.clear()
+                    yield self.OUTPUT_LOGSTOP, self.STATE.recording_path
+                    await self.STATE.recording_stopped.wait()
+                    self.STATE.recording_path = None
 
     async def task_implementation(self) -> typing.AsyncIterator[typing.Optional[SampleTriggerMessage]]:
         yield None
 
-    @ez.subscriber(INPUT_SAMPLE)
-    async def on_sample(self, msg: SampleMessage) -> None:
-        if self.STATE.recording_file:
-            # FIXME: This should probably be done in a separate thread
-            msg_ser = json.dumps(msg, cls = MessageEncoder)
-            self.STATE.recording_file.write(f'{msg_ser}\n')
-            self.STATE.n_trials.value += 1 # type: ignore
-            
+    @ez.subscriber(INPUT_MESSAGELOGGED)
+    async def on_sample(self, _: SampleMessage) -> None:
+        self.STATE.n_trials.value += 1 # type: ignore
 
     def content(self):
         return pn.layout.Card(
@@ -222,6 +245,7 @@ class Task(ez.Collection, Tab):
 
     TASK: TaskImplementation
     SAMPLER = Sampler()
+    LOGGER = MessageLogger()
 
     INPUT_TRIGGER = ez.InputStream(SampleTriggerMessage)
     INPUT_SIGNAL = ez.InputStream(AxisArray)
@@ -250,6 +274,16 @@ class Task(ez.Collection, Tab):
             (self.INPUT_SIGNAL, self.SAMPLER.INPUT_SIGNAL),
             (self.INPUT_TRIGGER, self.SAMPLER.INPUT_TRIGGER),
             (self.TASK.OUTPUT_TRIGGER, self.SAMPLER.INPUT_TRIGGER),
-            (self.SAMPLER.OUTPUT_SAMPLE, self.TASK.INPUT_SAMPLE),
-            (self.SAMPLER.OUTPUT_SAMPLE, self.OUTPUT_SAMPLE)
+            (self.SAMPLER.OUTPUT_SAMPLE, self.OUTPUT_SAMPLE),
+
+            # Again, I really dislike this interface
+            # MessageLogger should have a generator interface that we 
+            # can build message logging into other units
+            # without this level of plumbing work.
+            (self.TASK.OUTPUT_LOGSTART, self.LOGGER.INPUT_START),
+            (self.LOGGER.OUTPUT_START, self.TASK.INPUT_LOGSTARTED),
+            (self.SAMPLER.OUTPUT_SAMPLE, self.LOGGER.INPUT_MESSAGE),
+            (self.LOGGER.OUTPUT_MESSAGE, self.TASK.INPUT_MESSAGELOGGED),
+            (self.TASK.OUTPUT_LOGSTOP, self.LOGGER.INPUT_STOP),
+            (self.LOGGER.OUTPUT_STOP, self.TASK.INPUT_LOGSTOPPED),
         )
